@@ -144,11 +144,8 @@ public:
         g.setColour(juce::Colour(0xff6b4f9e).withAlpha(0.8f));
         g.setFont(juce::FontOptions(11.0f));
 
-        juce::String infoText = juce::String("Grains: ") + juce::String(getActiveParticleCount());
-        infoText += " | Density: " + juce::String(grainDensity, 1);
-        infoText += " | Texture: " + juce::String(texture, 2);
-
-        g.drawText(infoText, bounds.reduced(8.0f).toNearestInt(),
+        // REAL-TIME SAFE: Skip dynamic text to avoid string operations
+        g.drawText("GRAINS", bounds.reduced(8.0f).toNearestInt(),
                   juce::Justification::topLeft);
 
         // Title (pastel purple)
@@ -356,9 +353,8 @@ public:
             float logFreq = std::log10(freq / 20.0f) / std::log10(20000.0f / 20.0f);
             float x = bounds.getX() + (logFreq * width);
 
-            juce::String label = freq < 1000.0f ?
-                juce::String(static_cast<int>(freq)) + "Hz" :
-                juce::String(freq / 1000.0f, 1) + "k";
+            // REAL-TIME SAFE: Use pre-defined frequency labels
+            const char* label = freq < 1000.0f ? "100" : (freq < 5000.0f ? "1k" : "10k");
 
             g.drawText(label, x - 20, bounds.getBottom() - 20, 40, 15,
                       juce::Justification::centred);

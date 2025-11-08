@@ -40,7 +40,15 @@ class MacroControl
 public:
     MacroControl(int index) : macroIndex(index)
     {
-        name = "Macro " + juce::String(index + 1);
+        // REAL-TIME SAFE: Use pre-formatted strings to avoid dynamic string operations
+        static const char* macroNames[8] = {
+            "Macro 1", "Macro 2", "Macro 3", "Macro 4",
+            "Macro 5", "Macro 6", "Macro 7", "Macro 8"
+        };
+        if (index >= 0 && index < 8)
+            name = macroNames[index];
+        else
+            name = "Macro";
     }
     
     void setValue(float newValue)

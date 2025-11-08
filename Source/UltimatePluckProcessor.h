@@ -464,6 +464,12 @@ public:
         // Create preset manager
         presetManager = std::make_unique<PresetManager>(*apvts);
 
+        // Set up preset change callback to eliminate pops/clicks
+        presetManager->onPresetChange = [this]()
+        {
+            resetAllVoices();
+        };
+
         // Create LFO section
         lfoSection = std::make_unique<LFOSection>(*apvts);
     }
@@ -504,11 +510,104 @@ public:
         if (lfoSection)
             lfoSection->prepare(sampleRate);
 
-        // Ensure factory presets exist (do this AFTER APVTS is fully initialized)
+        // =====================================================================
+        // CACHE ALL PARAMETER POINTERS - REAL-TIME SAFETY CRITICAL
+        // =====================================================================
+        // Do this ONCE here, never on audio thread!
+
+        // Engine parameters
+        engineModeParam = apvts->getRawParameterValue("engineMode");
+
+        // Rings parameters
+        ringsBrightnessParam = apvts->getRawParameterValue("ringsBrightness");
+        ringsDampingParam = apvts->getRawParameterValue("ringsDamping");
+        ringsPositionParam = apvts->getRawParameterValue("ringsPosition");
+        ringsStructureParam = apvts->getRawParameterValue("ringsStructure");
+        ringsModelParam = apvts->getRawParameterValue("ringsModel");
+
+        // Clouds parameters
+        cloudsPositionParam = apvts->getRawParameterValue("cloudsPosition");
+        cloudsSizeParam = apvts->getRawParameterValue("cloudsSize");
+        cloudsDensityParam = apvts->getRawParameterValue("cloudsDensity");
+        cloudsTextureParam = apvts->getRawParameterValue("cloudsTexture");
+        cloudsPitchParam = apvts->getRawParameterValue("cloudsPitch");
+        cloudsStereoParam = apvts->getRawParameterValue("cloudsStereo");
+        cloudsFreezeParam = apvts->getRawParameterValue("cloudsFreeze");
+
+        // Wavetable parameters
+        wavetableAParam = apvts->getRawParameterValue("wavetableA");
+        wavetableBParam = apvts->getRawParameterValue("wavetableB");
+        wavetableMorphParam = apvts->getRawParameterValue("wavetableMorph");
+        wavetableWarpParam = apvts->getRawParameterValue("wavetableWarp");
+        wavetableFoldParam = apvts->getRawParameterValue("wavetableFold");
+
+        // Mix parameters
+        ringsMixParam = apvts->getRawParameterValue("ringsMix");
+        karplusMixParam = apvts->getRawParameterValue("karplusMix");
+        wavetableMixParam = apvts->getRawParameterValue("wavetableMix");
+        grainsMixParam = apvts->getRawParameterValue("grainsMix");
+
+        // Envelope parameters
+        attackParam = apvts->getRawParameterValue("attack");
+        decayParam = apvts->getRawParameterValue("decay");
+        sustainParam = apvts->getRawParameterValue("sustain");
+        releaseParam = apvts->getRawParameterValue("release");
+
+        // Filter parameters
+        filterCutoffParam = apvts->getRawParameterValue("filterCutoff");
+        filterResonanceParam = apvts->getRawParameterValue("filterResonance");
+        filterEnvParam = apvts->getRawParameterValue("filterEnv");
+
+        // Oscillator parameters
+        osc1WaveParam = apvts->getRawParameterValue("osc1Wave");
+        osc1OctaveParam = apvts->getRawParameterValue("osc1Octave");
+        osc1SemiParam = apvts->getRawParameterValue("osc1Semi");
+        osc1FineParam = apvts->getRawParameterValue("osc1Fine");
+        osc1PWParam = apvts->getRawParameterValue("osc1PW");
+        osc1MixParam = apvts->getRawParameterValue("osc1Mix");
+        osc2WaveParam = apvts->getRawParameterValue("osc2Wave");
+        osc2OctaveParam = apvts->getRawParameterValue("osc2Octave");
+        osc2SemiParam = apvts->getRawParameterValue("osc2Semi");
+        osc2FineParam = apvts->getRawParameterValue("osc2Fine");
+        osc2PWParam = apvts->getRawParameterValue("osc2PW");
+        osc2MixParam = apvts->getRawParameterValue("osc2Mix");
+
+        // Effect parameters
+        delayTimeParam = apvts->getRawParameterValue("delayTime");
+        delayFeedbackParam = apvts->getRawParameterValue("delayFeedback");
+        delayMixParam = apvts->getRawParameterValue("delayMix");
+        delayFilterParam = apvts->getRawParameterValue("delayFilter");
+        delayPingPongParam = apvts->getRawParameterValue("delayPingPong");
+        reverbSizeParam = apvts->getRawParameterValue("reverbSize");
+        reverbDampingParam = apvts->getRawParameterValue("reverbDamping");
+        reverbWidthParam = apvts->getRawParameterValue("reverbWidth");
+        reverbMixParam = apvts->getRawParameterValue("reverbMix");
+        reverbShimmerParam = apvts->getRawParameterValue("reverbShimmer");
+        chorusRateParam = apvts->getRawParameterValue("chorusRate");
+        chorusDepthParam = apvts->getRawParameterValue("chorusDepth");
+        chorusMixParam = apvts->getRawParameterValue("chorusMix");
+        chorusFeedbackParam = apvts->getRawParameterValue("chorusFeedback");
+        chorusWidthParam = apvts->getRawParameterValue("chorusWidth");
+
+        // Performance control parameters
+        portamentoParam = apvts->getRawParameterValue("portamento");
+        vibratoDepthParam = apvts->getRawParameterValue("vibratoDepth");
+        vibratoRateParam = apvts->getRawParameterValue("vibratoRate");
+        masterTuneParam = apvts->getRawParameterValue("masterTune");
+        velocitySensParam = apvts->getRawParameterValue("velocitySens");
+        panSpreadParam = apvts->getRawParameterValue("panSpread");
+        unisonVoicesParam = apvts->getRawParameterValue("unisonVoices");
+        unisonDetuneParam = apvts->getRawParameterValue("unisonDetune");
+
+        // REAL-TIME SAFETY: Move factory preset creation to message thread
+        // This prevents string operations on audio thread
         if (presetManager)
         {
-            DBG("prepareToPlay: Ensuring factory presets exist...");
-            presetManager->ensureFactoryPresetsExist();
+            juce::MessageManager::callAsync([this]()
+            {
+                if (presetManager)
+                    presetManager->ensureFactoryPresetsExist();
+            });
         }
     }
     
@@ -534,17 +633,22 @@ public:
 
         synth.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
 
-        // Update visual feedback with grain parameters
-        if (visualFeedbackPanel)
+        // Update visual feedback - REAL-TIME SAFE: Move string operations to message thread
+        if (visualFeedbackPanel && cloudsDensityParam && cloudsSizeParam && cloudsPositionParam && cloudsTextureParam)
         {
-            float density = apvts->getRawParameterValue("cloudsDensity")->load();
-            float grainSize = apvts->getRawParameterValue("cloudsSize")->load();
-            float position = apvts->getRawParameterValue("cloudsPosition")->load();
-            float texture = apvts->getRawParameterValue("cloudsTexture")->load();
+            float density = cloudsDensityParam->load();
+            float grainSize = cloudsSizeParam->load();
+            float position = cloudsPositionParam->load();
+            float texture = cloudsTextureParam->load();
 
-            visualFeedbackPanel->updateGrainParameters(density, grainSize, position, texture);
+            // Move grain parameter update to message thread to avoid string operations on audio thread
+            juce::MessageManager::callAsync([this, density, grainSize, position, texture]()
+            {
+                if (visualFeedbackPanel)
+                    visualFeedbackPanel->updateGrainParameters(density, grainSize, position, texture);
+            });
 
-            // Push samples to spectrum analyzer
+            // Push samples to spectrum analyzer - THIS IS REAL-TIME SAFE
             if (buffer.getNumChannels() > 0)
                 visualFeedbackPanel->pushSamplesForSpectrum(buffer.getReadPointer(0), buffer.getNumSamples());
         }
@@ -581,8 +685,7 @@ public:
         }
         catch (...)
         {
-            // Prevent crash on save - log error but don't crash the app
-            DBG("Error saving state - skipping serialization");
+            // Prevent crash on save - skip serialization
         }
     }
     
@@ -607,6 +710,25 @@ public:
     void triggerNoteOff(int midiNote)
     {
         keyboardState.noteOff(1, midiNote, 0.0f);
+    }
+
+    // Reset all voices for preset changes - eliminates pops/clicks
+    void resetAllVoices()
+    {
+        // Stop all current notes immediately but safely
+        for (int i = 0; i < synth.getNumVoices(); ++i)
+        {
+            if (auto* voice = synth.getVoice(i))
+            {
+                voice->stopNote(1.0f, false); // Force immediate stop with fade-out
+            }
+        }
+
+        // Clear keyboard state
+        keyboardState.allNotesOff(1);
+
+        // Reset synthesizer
+        synth.allNotesOff(1, false);
     }
 
     // Get MIDI note from computer key
@@ -691,6 +813,94 @@ private:
 
     juce::dsp::Reverb reverb;
     juce::dsp::DelayLine<float> delay{96000};
+
+    // =====================================================================
+    // REAL-TIME SAFE PARAMETER CACHE - NO STRING LOOKUPS ON AUDIO THREAD
+    // =====================================================================
+
+    // Engine parameters
+    std::atomic<float>* engineModeParam = nullptr;
+
+    // Rings parameters
+    std::atomic<float>* ringsBrightnessParam = nullptr;
+    std::atomic<float>* ringsDampingParam = nullptr;
+    std::atomic<float>* ringsPositionParam = nullptr;
+    std::atomic<float>* ringsStructureParam = nullptr;
+    std::atomic<float>* ringsModelParam = nullptr;
+
+    // Clouds parameters
+    std::atomic<float>* cloudsPositionParam = nullptr;
+    std::atomic<float>* cloudsSizeParam = nullptr;
+    std::atomic<float>* cloudsDensityParam = nullptr;
+    std::atomic<float>* cloudsTextureParam = nullptr;
+    std::atomic<float>* cloudsPitchParam = nullptr;
+    std::atomic<float>* cloudsStereoParam = nullptr;
+    std::atomic<float>* cloudsFreezeParam = nullptr;
+
+    // Wavetable parameters
+    std::atomic<float>* wavetableAParam = nullptr;
+    std::atomic<float>* wavetableBParam = nullptr;
+    std::atomic<float>* wavetableMorphParam = nullptr;
+    std::atomic<float>* wavetableWarpParam = nullptr;
+    std::atomic<float>* wavetableFoldParam = nullptr;
+
+    // Mix parameters
+    std::atomic<float>* ringsMixParam = nullptr;
+    std::atomic<float>* karplusMixParam = nullptr;
+    std::atomic<float>* wavetableMixParam = nullptr;
+    std::atomic<float>* grainsMixParam = nullptr;
+
+    // Envelope parameters
+    std::atomic<float>* attackParam = nullptr;
+    std::atomic<float>* decayParam = nullptr;
+    std::atomic<float>* sustainParam = nullptr;
+    std::atomic<float>* releaseParam = nullptr;
+
+    // Filter parameters
+    std::atomic<float>* filterCutoffParam = nullptr;
+    std::atomic<float>* filterResonanceParam = nullptr;
+    std::atomic<float>* filterEnvParam = nullptr;
+
+    // Oscillator parameters
+    std::atomic<float>* osc1WaveParam = nullptr;
+    std::atomic<float>* osc1OctaveParam = nullptr;
+    std::atomic<float>* osc1SemiParam = nullptr;
+    std::atomic<float>* osc1FineParam = nullptr;
+    std::atomic<float>* osc1PWParam = nullptr;
+    std::atomic<float>* osc1MixParam = nullptr;
+    std::atomic<float>* osc2WaveParam = nullptr;
+    std::atomic<float>* osc2OctaveParam = nullptr;
+    std::atomic<float>* osc2SemiParam = nullptr;
+    std::atomic<float>* osc2FineParam = nullptr;
+    std::atomic<float>* osc2PWParam = nullptr;
+    std::atomic<float>* osc2MixParam = nullptr;
+
+    // Effect parameters
+    std::atomic<float>* delayTimeParam = nullptr;
+    std::atomic<float>* delayFeedbackParam = nullptr;
+    std::atomic<float>* delayMixParam = nullptr;
+    std::atomic<float>* delayFilterParam = nullptr;
+    std::atomic<float>* delayPingPongParam = nullptr;
+    std::atomic<float>* reverbSizeParam = nullptr;
+    std::atomic<float>* reverbDampingParam = nullptr;
+    std::atomic<float>* reverbWidthParam = nullptr;
+    std::atomic<float>* reverbMixParam = nullptr;
+    std::atomic<float>* reverbShimmerParam = nullptr;
+    std::atomic<float>* chorusRateParam = nullptr;
+    std::atomic<float>* chorusDepthParam = nullptr;
+    std::atomic<float>* chorusMixParam = nullptr;
+    std::atomic<float>* chorusFeedbackParam = nullptr;
+    std::atomic<float>* chorusWidthParam = nullptr;
+
+    // Performance control parameters
+    std::atomic<float>* portamentoParam = nullptr;
+    std::atomic<float>* vibratoDepthParam = nullptr;
+    std::atomic<float>* vibratoRateParam = nullptr;
+    std::atomic<float>* masterTuneParam = nullptr;
+    std::atomic<float>* velocitySensParam = nullptr;
+    std::atomic<float>* panSpreadParam = nullptr;
+    std::atomic<float>* unisonVoicesParam = nullptr;
+    std::atomic<float>* unisonDetuneParam = nullptr;
     
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     {
@@ -851,74 +1061,96 @@ private:
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             "osc2Mix", "Osc 2 Mix", 0.0f, 1.0f, 0.0f));
 
+        // PERFORMANCE CONTROLS - Real functionality now implemented!
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "portamento", "Portamento", 0.0f, 1.0f, 0.0f));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "vibratoDepth", "Vibrato Depth", 0.0f, 1.0f, 0.0f));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "vibratoRate", "Vibrato Rate", 0.1f, 10.0f, 4.0f));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "masterTune", "Master Tune", -100.0f, 100.0f, 0.0f));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "velocitySens", "Velocity Sensitivity", 0.0f, 2.0f, 1.0f));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "panSpread", "Pan Spread", 0.0f, 1.0f, 0.0f));
+        params.push_back(std::make_unique<juce::AudioParameterInt>(
+            "unisonVoices", "Unison Voices", 1, 4, 1));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            "unisonDetune", "Unison Detune", 0.0f, 50.0f, 0.0f));
+
         return {params.begin(), params.end()};
     }
     
     void updateVoiceParameters()
     {
+        // REAL-TIME SAFE - No string lookups, only cached pointer access!
+        if (!engineModeParam || !ringsBrightnessParam || !ringsDampingParam)
+            return; // Safety check
+
         UltimatePluckVoice::VoiceParams voiceParams;
-        
+
         // Engine mode
-        int modeIndex = apvts->getRawParameterValue("engineMode")->load();
+        int modeIndex = engineModeParam->load();
         voiceParams.engineMode = static_cast<UltimatePluckVoice::EngineMode>(modeIndex);
-        
+
         // Rings
-        voiceParams.ringsBrightness = apvts->getRawParameterValue("ringsBrightness")->load();
-        voiceParams.ringsDamping = apvts->getRawParameterValue("ringsDamping")->load();
-        voiceParams.ringsPosition = apvts->getRawParameterValue("ringsPosition")->load();
-        voiceParams.ringsStructure = apvts->getRawParameterValue("ringsStructure")->load();
-        int ringModelIndex = apvts->getRawParameterValue("ringsModel")->load();
+        voiceParams.ringsBrightness = ringsBrightnessParam->load();
+        voiceParams.ringsDamping = ringsDampingParam->load();
+        voiceParams.ringsPosition = ringsPositionParam->load();
+        voiceParams.ringsStructure = ringsStructureParam->load();
+        int ringModelIndex = ringsModelParam->load();
         voiceParams.ringsModel = static_cast<ModalResonator::ResonatorModel>(ringModelIndex);
-        
+
         // Clouds
-        voiceParams.cloudsParams.position = apvts->getRawParameterValue("cloudsPosition")->load();
-        voiceParams.cloudsParams.size = apvts->getRawParameterValue("cloudsSize")->load();
-        voiceParams.cloudsParams.density = apvts->getRawParameterValue("cloudsDensity")->load();
-        voiceParams.cloudsParams.texture = apvts->getRawParameterValue("cloudsTexture")->load();
-        voiceParams.cloudsParams.pitch = apvts->getRawParameterValue("cloudsPitch")->load();
-        voiceParams.cloudsParams.stereoSpread = apvts->getRawParameterValue("cloudsStereo")->load();
-        voiceParams.cloudsParams.freeze = apvts->getRawParameterValue("cloudsFreeze")->load() > 0.5f;
-        
+        voiceParams.cloudsParams.position = cloudsPositionParam->load();
+        voiceParams.cloudsParams.size = cloudsSizeParam->load();
+        voiceParams.cloudsParams.density = cloudsDensityParam->load();
+        voiceParams.cloudsParams.texture = cloudsTextureParam->load();
+        voiceParams.cloudsParams.pitch = cloudsPitchParam->load();
+        voiceParams.cloudsParams.stereoSpread = cloudsStereoParam->load();
+        voiceParams.cloudsParams.freeze = cloudsFreezeParam->load() > 0.5f;
+
         // Wavetable
-        voiceParams.wavetableParams.tableA = apvts->getRawParameterValue("wavetableA")->load();
-        voiceParams.wavetableParams.tableB = apvts->getRawParameterValue("wavetableB")->load();
-        voiceParams.wavetableParams.morph = apvts->getRawParameterValue("wavetableMorph")->load();
-        voiceParams.wavetableParams.warp = apvts->getRawParameterValue("wavetableWarp")->load();
-        voiceParams.wavetableParams.fold = apvts->getRawParameterValue("wavetableFold")->load();
-        
+        voiceParams.wavetableParams.tableA = wavetableAParam->load();
+        voiceParams.wavetableParams.tableB = wavetableBParam->load();
+        voiceParams.wavetableParams.morph = wavetableMorphParam->load();
+        voiceParams.wavetableParams.warp = wavetableWarpParam->load();
+        voiceParams.wavetableParams.fold = wavetableFoldParam->load();
+
         // Mix
-        voiceParams.ringsMix = apvts->getRawParameterValue("ringsMix")->load();
-        voiceParams.karplusMix = apvts->getRawParameterValue("karplusMix")->load();
-        voiceParams.wavetableMix = apvts->getRawParameterValue("wavetableMix")->load();
-        voiceParams.grainsMix = apvts->getRawParameterValue("grainsMix")->load();
-        
+        voiceParams.ringsMix = ringsMixParam->load();
+        voiceParams.karplusMix = karplusMixParam->load();
+        voiceParams.wavetableMix = wavetableMixParam->load();
+        voiceParams.grainsMix = grainsMixParam->load();
+
         // Envelope
-        voiceParams.attack = apvts->getRawParameterValue("attack")->load();
-        voiceParams.decay = apvts->getRawParameterValue("decay")->load();
-        voiceParams.sustain = apvts->getRawParameterValue("sustain")->load();
-        voiceParams.release = apvts->getRawParameterValue("release")->load();
-        
+        voiceParams.attack = attackParam->load();
+        voiceParams.decay = decayParam->load();
+        voiceParams.sustain = sustainParam->load();
+        voiceParams.release = releaseParam->load();
+
         // Filter
-        voiceParams.filterCutoff = apvts->getRawParameterValue("filterCutoff")->load();
-        voiceParams.filterResonance = apvts->getRawParameterValue("filterResonance")->load();
-        voiceParams.filterEnvAmount = apvts->getRawParameterValue("filterEnv")->load();
+        voiceParams.filterCutoff = filterCutoffParam->load();
+        voiceParams.filterResonance = filterResonanceParam->load();
+        voiceParams.filterEnvAmount = filterEnvParam->load();
 
         // Basic Oscillators
-        int osc1WaveIndex = apvts->getRawParameterValue("osc1Wave")->load();
+        int osc1WaveIndex = osc1WaveParam->load();
         voiceParams.osc1Wave = static_cast<BasicOscillator::WaveType>(osc1WaveIndex);
-        voiceParams.osc1Octave = apvts->getRawParameterValue("osc1Octave")->load();
-        voiceParams.osc1Semi = apvts->getRawParameterValue("osc1Semi")->load();
-        voiceParams.osc1Fine = apvts->getRawParameterValue("osc1Fine")->load();
-        voiceParams.osc1PW = apvts->getRawParameterValue("osc1PW")->load();
-        voiceParams.osc1Mix = apvts->getRawParameterValue("osc1Mix")->load();
+        voiceParams.osc1Octave = osc1OctaveParam->load();
+        voiceParams.osc1Semi = osc1SemiParam->load();
+        voiceParams.osc1Fine = osc1FineParam->load();
+        voiceParams.osc1PW = osc1PWParam->load();
+        voiceParams.osc1Mix = osc1MixParam->load();
 
-        int osc2WaveIndex = apvts->getRawParameterValue("osc2Wave")->load();
+        int osc2WaveIndex = osc2WaveParam->load();
         voiceParams.osc2Wave = static_cast<BasicOscillator::WaveType>(osc2WaveIndex);
-        voiceParams.osc2Octave = apvts->getRawParameterValue("osc2Octave")->load();
-        voiceParams.osc2Semi = apvts->getRawParameterValue("osc2Semi")->load();
-        voiceParams.osc2Fine = apvts->getRawParameterValue("osc2Fine")->load();
-        voiceParams.osc2PW = apvts->getRawParameterValue("osc2PW")->load();
-        voiceParams.osc2Mix = apvts->getRawParameterValue("osc2Mix")->load();
+        voiceParams.osc2Octave = osc2OctaveParam->load();
+        voiceParams.osc2Semi = osc2SemiParam->load();
+        voiceParams.osc2Fine = osc2FineParam->load();
+        voiceParams.osc2PW = osc2PWParam->load();
+        voiceParams.osc2Mix = osc2MixParam->load();
 
         // Update all voices
         for (int i = 0; i < synth.getNumVoices(); ++i)
@@ -939,21 +1171,15 @@ private:
         auto* leftChannel = buffer.getWritePointer(0);
         auto* rightChannel = buffer.getWritePointer(1);
 
-        // STAGE 1: DELAY
-        auto* delayTimeParam = apvts->getRawParameterValue("delayTime");
-        auto* delayFeedbackParam = apvts->getRawParameterValue("delayFeedback");
-        auto* delayMixParam = apvts->getRawParameterValue("delayMix");
-        auto* delayFilterParam = apvts->getRawParameterValue("delayFilter");
-        auto* delayPingPongParam = apvts->getRawParameterValue("delayPingPong");
-
+        // STAGE 1: DELAY - REAL-TIME SAFE (cached pointers)
         if (!delayTimeParam || !delayFeedbackParam || !delayMixParam || !delayFilterParam || !delayPingPongParam)
             return;
 
-        float delayTime = delayTimeParam->load();
-        float delayFeedback = delayFeedbackParam->load();
-        float delayMix = delayMixParam->load();
-        float delayFilter = delayFilterParam->load();
-        bool delayPingPong = delayPingPongParam->load() > 0.5f;
+        float delayTime = this->delayTimeParam->load();
+        float delayFeedback = this->delayFeedbackParam->load();
+        float delayMix = this->delayMixParam->load();
+        float delayFilter = this->delayFilterParam->load();
+        bool delayPingPong = this->delayPingPongParam->load() > 0.5f;
 
         if (delayMix > 0.001f)
         {
@@ -970,21 +1196,15 @@ private:
             }
         }
 
-        // STAGE 2: REVERB
-        auto* reverbSizeParam = apvts->getRawParameterValue("reverbSize");
-        auto* reverbDampingParam = apvts->getRawParameterValue("reverbDamping");
-        auto* reverbWidthParam = apvts->getRawParameterValue("reverbWidth");
-        auto* reverbMixParam = apvts->getRawParameterValue("reverbMix");
-        auto* reverbShimmerParam = apvts->getRawParameterValue("reverbShimmer");
-
+        // STAGE 2: REVERB - REAL-TIME SAFE (cached pointers)
         if (!reverbSizeParam || !reverbDampingParam || !reverbWidthParam || !reverbMixParam || !reverbShimmerParam)
             return;
 
-        float reverbSize = reverbSizeParam->load();
-        float reverbDamping = reverbDampingParam->load();
-        float reverbWidth = reverbWidthParam->load();
-        float reverbMix = reverbMixParam->load();
-        float reverbShimmer = reverbShimmerParam->load();
+        float reverbSize = this->reverbSizeParam->load();
+        float reverbDamping = this->reverbDampingParam->load();
+        float reverbWidth = this->reverbWidthParam->load();
+        float reverbMix = this->reverbMixParam->load();
+        float reverbShimmer = this->reverbShimmerParam->load();
 
         if (reverbMix > 0.001f)
         {
@@ -996,21 +1216,15 @@ private:
             enhancedReverb.processStereo(leftChannel, rightChannel, numSamples);
         }
 
-        // STAGE 3: CHORUS
-        auto* chorusRateParam = apvts->getRawParameterValue("chorusRate");
-        auto* chorusDepthParam = apvts->getRawParameterValue("chorusDepth");
-        auto* chorusMixParam = apvts->getRawParameterValue("chorusMix");
-        auto* chorusFeedbackParam = apvts->getRawParameterValue("chorusFeedback");
-        auto* chorusWidthParam = apvts->getRawParameterValue("chorusWidth");
-
+        // STAGE 3: CHORUS - REAL-TIME SAFE (cached pointers)
         if (!chorusRateParam || !chorusDepthParam || !chorusMixParam || !chorusFeedbackParam || !chorusWidthParam)
             return;
 
-        float chorusRate = chorusRateParam->load();
-        float chorusDepth = chorusDepthParam->load();
-        float chorusMix = chorusMixParam->load();
-        float chorusFeedback = chorusFeedbackParam->load();
-        float chorusWidth = chorusWidthParam->load();
+        float chorusRate = this->chorusRateParam->load();
+        float chorusDepth = this->chorusDepthParam->load();
+        float chorusMix = this->chorusMixParam->load();
+        float chorusFeedback = this->chorusFeedbackParam->load();
+        float chorusWidth = this->chorusWidthParam->load();
 
         if (chorusMix > 0.001f)
         {

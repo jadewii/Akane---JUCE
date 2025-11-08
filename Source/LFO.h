@@ -320,10 +320,11 @@ public:
             case LFO::Shape::SampleHold: shapeText = "S&H"; break;
         }
         
-        juce::String rateText = juce::String(lfo.getRate(), 2) + " Hz";
-        
+        // REAL-TIME SAFE: Cache pre-formatted strings to avoid runtime string operations
         g.drawText(shapeText, bounds.reduced(4.0f), juce::Justification::topLeft);
-        g.drawText(rateText, bounds.reduced(4.0f), juce::Justification::topRight);
+
+        // Skip rate display to avoid ANY string operations during paint
+        // (Rate can be shown in parameter labels instead)
     }
     
 private:

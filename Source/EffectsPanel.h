@@ -22,34 +22,48 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto bounds = getLocalBounds().toFloat();
+
+        // Make it a perfect circle fitting the bounds
+        auto diameter = juce::jmin(bounds.getWidth(), bounds.getHeight());
+        auto radius = diameter * 0.5f;
         auto centre = bounds.getCentre();
-        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.4f;
 
-        // Outer circle (darker border)
-        g.setColour(juce::Colour(0xff404040));
-        g.fillEllipse(centre.x - radius - 1, centre.y - radius - 1, (radius + 1) * 2, (radius + 1) * 2);
+        // Create circular bounds
+        auto circleBounds = juce::Rectangle<float>(
+            centre.x - radius,
+            centre.y - radius,
+            diameter,
+            diameter
+        );
 
-        // Main LED circle
         if (isOn)
         {
-            // Green when on
-            g.setColour(juce::Colour(0xff00ff00));
-            g.fillEllipse(centre.x - radius, centre.y - radius, radius * 2, radius * 2);
+            // Green when ON (active)
+            g.setColour(juce::Colour(0xff4CAF50)); // Material Green
+            g.fillEllipse(circleBounds);
 
-            // Bright center highlight
-            g.setColour(juce::Colour(0xff80ff80));
-            g.fillEllipse(centre.x - radius * 0.6f, centre.y - radius * 0.6f, radius * 1.2f, radius * 1.2f);
+            // Subtle highlight for 3D effect
+            g.setColour(juce::Colour(0xff81C784)); // Lighter green highlight
+            auto highlightBounds = circleBounds.reduced(diameter * 0.15f);
+            highlightBounds = highlightBounds.translated(-diameter * 0.1f, -diameter * 0.1f);
+            g.fillEllipse(highlightBounds);
         }
         else
         {
-            // Red when off
-            g.setColour(juce::Colour(0xffff0000));
-            g.fillEllipse(centre.x - radius, centre.y - radius, radius * 2, radius * 2);
+            // Pastel pink when OFF (bypassed)
+            g.setColour(juce::Colour(0xffd8b5ff)); // Your existing pastel pink
+            g.fillEllipse(circleBounds);
 
-            // Darker center when off
-            g.setColour(juce::Colour(0xff800000));
-            g.fillEllipse(centre.x - radius * 0.6f, centre.y - radius * 0.6f, radius * 1.2f, radius * 1.2f);
+            // Subtle shadow for depth
+            g.setColour(juce::Colour(0xffc8a5ff)); // Slightly darker pink
+            auto shadowBounds = circleBounds.reduced(diameter * 0.15f);
+            shadowBounds = shadowBounds.translated(diameter * 0.05f, diameter * 0.05f);
+            g.fillEllipse(shadowBounds);
         }
+
+        // Outer rim for definition
+        g.setColour(juce::Colour(0xff6b4f9e)); // Your existing purple
+        g.drawEllipse(circleBounds, 1.0f);
     }
 
     void mouseDown(const juce::MouseEvent&) override

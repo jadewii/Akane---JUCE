@@ -111,12 +111,12 @@ public:
     
     juce::Font getComboBoxFont(juce::ComboBox&) override
     {
-        return juce::Font("Helvetica Neue", 14.0f, juce::Font::plain);
+        return juce::Font(juce::FontOptions("Helvetica Neue", 14.0f, juce::Font::plain));
     }
 
     juce::Font getLabelFont(juce::Label&) override
     {
-        return juce::Font("Helvetica Neue", 12.0f, juce::Font::plain);
+        return juce::Font(juce::FontOptions("Helvetica Neue", 12.0f, juce::Font::plain));
     }
 };
 
@@ -559,7 +559,7 @@ public:
         : sectionName(name), accent(accentColour)
     {
         titleLabel.setText(name, juce::dontSendNotification);
-        titleLabel.setFont(juce::Font("Helvetica Neue", 14.0f, juce::Font::bold));
+        titleLabel.setFont(juce::Font(juce::FontOptions("Helvetica Neue", 14.0f, juce::Font::bold)));
         titleLabel.setColour(juce::Label::textColourId, accent);
         titleLabel.setJustificationType(juce::Justification::centredLeft);
         addAndMakeVisible(titleLabel);
@@ -630,7 +630,7 @@ public:
 
         // Title
         titleLabel.setText("AKANE", juce::dontSendNotification);
-        titleLabel.setFont(juce::Font("Helvetica Neue", 24.0f, juce::Font::bold));
+        titleLabel.setFont(juce::Font(juce::FontOptions("Helvetica Neue", 24.0f, juce::Font::bold)));
         titleLabel.setColour(juce::Label::textColourId, juce::Colours::black); // Black text on pink background
         titleLabel.setColour(juce::Label::backgroundColourId, juce::Colour(0xffffb3d9)); // Pink background like selected button
         titleLabel.setJustificationType(juce::Justification::centredLeft);
@@ -1152,20 +1152,24 @@ private:
 
     void savePreset()
     {
-        juce::AlertWindow window("Save Preset", "Enter preset name:", juce::MessageBoxIconType::NoIcon);
-        window.addTextEditor("presetName", "My Preset");
-        window.addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-        window.addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+        auto window = std::make_unique<juce::AlertWindow>("Save Preset", "Enter preset name:", juce::MessageBoxIconType::NoIcon);
+        window->addTextEditor("presetName", "My Preset");
+        window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-        if (window.runModalLoop() == 1)
+        window->enterModalState(true, juce::ModalCallbackFunction::create([this, windowPtr = window.release()](int result)
         {
-            auto presetName = window.getTextEditorContents("presetName");
-            if (presetName.isNotEmpty())
+            std::unique_ptr<juce::AlertWindow> windowWrapper(windowPtr);
+            if (result == 1)
             {
-                processor.getPresetManager().savePreset(presetName, "User");
-                updatePresetList();
+                auto presetName = windowWrapper->getTextEditorContents("presetName");
+                if (presetName.isNotEmpty())
+                {
+                    processor.getPresetManager().savePreset(presetName, "User");
+                    updatePresetList();
+                }
             }
-        }
+        }));
     }
 
     void togglePresetPanel()

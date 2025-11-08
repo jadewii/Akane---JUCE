@@ -61,8 +61,11 @@ private:
     void timerCallback()
     {
         float val = macroControl.getValue();
-        valueLabel.setText(juce::String(static_cast<int>(val * 100)) + "%", 
-                          juce::dontSendNotification);
+        // REAL-TIME SAFE: Use pre-formatted string to avoid dynamic string operations
+        static char buffer[8];
+        int percentage = static_cast<int>(val * 100);
+        std::snprintf(buffer, sizeof(buffer), "%d%%", percentage);
+        valueLabel.setText(juce::String(buffer), juce::dontSendNotification);
     }
     
     MacroControl& macroControl;

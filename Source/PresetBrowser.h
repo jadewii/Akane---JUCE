@@ -25,14 +25,14 @@ public:
 
         // Plus icon and text
         g.setColour(juce::Colour(0xff6b4f9e));
-        g.setFont(juce::Font(16.0f, juce::Font::bold));
+        g.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
 
         // Draw plus symbol
         auto iconArea = bounds.removeFromLeft(40);
         g.drawText("+", iconArea, juce::Justification::centred);
 
         // Draw text
-        g.setFont(juce::Font(14.0f));
+        g.setFont(juce::Font(juce::FontOptions(14.0f)));
         g.drawText("Add New Preset", bounds.reduced(10, 5), juce::Justification::centredLeft);
     }
 
@@ -58,26 +58,38 @@ public:
 class PresetListItem : public juce::Component
 {
 public:
-    PresetListItem(const Preset& preset, int index)
-        : presetData(preset), presetIndex(index)
+    PresetListItem(const Preset& preset, int index, bool developmentMode = false)
+        : presetData(preset), presetIndex(index), isDevelopmentMode(developmentMode)
     {
         setSize(400, 40);
 
-        // Add delete button (only for user presets)
-        if (!presetData.isFactory)
+        // Add delete button logic
+        if (!presetData.isFactory || isDevelopmentMode)
         {
+            // Deletable - either user preset or development mode
             deleteButton.setButtonText("X");
             deleteButton.onClick = [this] {
                 if (onDelete)
                     onDelete(presetIndex);
             };
-            deleteButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffff6b6b));
-            deleteButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+
+            if (presetData.isFactory && isDevelopmentMode)
+            {
+                // Factory preset in development mode - use orange/yellow warning color
+                deleteButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffff9500)); // Orange
+                deleteButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+            }
+            else
+            {
+                // Regular user preset - use red
+                deleteButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffff6b6b));
+                deleteButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+            }
             addAndMakeVisible(deleteButton);
         }
         else
         {
-            // Factory preset - show lock icon instead
+            // Factory preset - show lock icon (not in development mode)
             deleteButton.setButtonText("🔒");
             deleteButton.setEnabled(false);
             deleteButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffd8b5ff));
@@ -110,11 +122,11 @@ public:
         }
 
         // Name
-        g.setFont(juce::Font(14.0f, juce::Font::bold));
+        g.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::bold)));
         g.drawText(presetData.name, textArea.removeFromLeft(180), juce::Justification::centredLeft);
 
         // Category
-        g.setFont(juce::Font(11.0f));
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawText(presetData.category, textArea.removeFromLeft(70), juce::Justification::centredLeft);
 
         // Rating
@@ -158,6 +170,7 @@ private:
     Preset presetData;  // Store a copy, not a reference (to avoid dangling reference)
     int presetIndex;
     bool isSelected = false;
+    bool isDevelopmentMode = false;
     juce::TextButton deleteButton;
 };
 
@@ -166,6 +179,19 @@ class PresetBrowser : public juce::Component
 public:
     PresetBrowser(PresetManager& manager) : presetManager(manager)
     {
+        // Development mode toggle - orange/warning colors
+        developmentToggle.setButtonText("DEV MODE");
+        developmentToggle.setToggleable(true);
+        developmentToggle.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffffa500)); // Orange
+        developmentToggle.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffff6600)); // Darker orange
+        developmentToggle.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+        developmentToggle.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+        developmentToggle.onClick = [this] {
+            isDevelopmentMode = developmentToggle.getToggleState();
+            updatePresetList();
+        };
+        addAndMakeVisible(developmentToggle);
+
         // Search box - pastel colors, NO black/blue
         searchBox.setTextToShowWhenEmpty("Search presets...", juce::Colour(0xffc8a5ff));
         searchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xfffff0ff));
@@ -243,7 +269,7 @@ public:
             juce::Colour(0xffd8b5ff), 0, titleArea.getBottom(), false));
         g.fillRect(titleArea);
 
-        g.setFont(juce::Font(20.0f, juce::Font::bold));
+        g.setFont(juce::Font(juce::FontOptions(20.0f, juce::Font::bold)));
         g.setColour(juce::Colour(0xff6b4f9e)); // Darker purple for text
         g.drawText("PRESETS", titleArea.reduced(15), juce::Justification::centredLeft);
 
@@ -256,18 +282,20 @@ public:
     {
         auto bounds = getLocalBounds().reduced(10);
         bounds.removeFromTop(40);
-        
+
         // Controls row
         auto controlsArea = bounds.removeFromTop(40);
+        developmentToggle.setBounds(controlsArea.removeFromLeft(90).reduced(2));
+        controlsArea.removeFromLeft(10);
         factoryUserToggle.setBounds(controlsArea.removeFromLeft(90).reduced(2));
         controlsArea.removeFromLeft(10);
         categorySelector.setBounds(controlsArea.removeFromLeft(110).reduced(2));
         controlsArea.removeFromLeft(10);
-        searchBox.setBounds(controlsArea.removeFromLeft(180).reduced(2));
+        searchBox.setBounds(controlsArea.removeFromLeft(160).reduced(2)); // Slightly smaller to make room for dev button
         controlsArea.removeFromLeft(10);
         favoritesButton.setBounds(controlsArea.removeFromLeft(100).reduced(2));
         saveButton.setBounds(controlsArea.removeFromRight(80).reduced(2));
-        
+
         bounds.removeFromTop(10);
         
         // Preset list
@@ -353,7 +381,7 @@ private:
 
         for (int i = 0; i < results.size(); ++i)
         {
-            auto* item = new PresetListItem(results[i], i);
+            auto* item = new PresetListItem(results[i], i, isDevelopmentMode);
 
             // Capture the preset name to find the actual index
             juce::String presetName = results[i].name;
@@ -391,7 +419,7 @@ private:
                 {
                     if (allPresets[j] == presetName)
                     {
-                        presetManager.deletePreset(j);
+                        presetManager.deletePreset(j, isDevelopmentMode);
                         updatePresetList(); // Refresh the list
                         break;
                     }
@@ -408,26 +436,31 @@ private:
     void showSaveDialog()
     {
         // Simple save dialog
-        juce::AlertWindow dialog("Save Preset", 
+        auto dialog = std::make_unique<juce::AlertWindow>("Save Preset",
                                 "Enter preset name and category",
                                 juce::AlertWindow::NoIcon);
-        
-        dialog.addTextEditor("name", "New Preset", "Name:");
-        dialog.addComboBox("category", presetManager.getCategories(), "Category:");
-        dialog.addButton("Save", 1);
-        dialog.addButton("Cancel", 0);
-        
-        if (dialog.runModalLoop() == 1)
+
+        dialog->addTextEditor("name", "New Preset", "Name:");
+        dialog->addComboBox("category", presetManager.getCategories(), "Category:");
+        dialog->addButton("Save", 1);
+        dialog->addButton("Cancel", 0);
+
+        dialog->enterModalState(true, juce::ModalCallbackFunction::create([this, dialogPtr = dialog.release()](int result)
         {
-            juce::String name = dialog.getTextEditorContents("name");
-            juce::String category = dialog.getComboBoxComponent("category")->getText();
-            presetManager.savePreset(name, category);
-            updatePresetList();
-        }
+            std::unique_ptr<juce::AlertWindow> dialogWrapper(dialogPtr);
+            if (result == 1)
+            {
+                juce::String name = dialogWrapper->getTextEditorContents("name");
+                juce::String category = dialogWrapper->getComboBoxComponent("category")->getText();
+                presetManager.savePreset(name, category);
+                updatePresetList();
+            }
+        }));
     }
     
     PresetManager& presetManager;
 
+    juce::TextButton developmentToggle;   // Development mode toggle
     juce::TextButton factoryUserToggle;  // Factory/User/All toggle
     juce::TextEditor searchBox;
     juce::ComboBox categorySelector;
@@ -440,4 +473,5 @@ private:
     std::unique_ptr<AddNewPresetItem> ghostItem;
 
     int filterMode = 0;  // 0 = All, 1 = Factory, 2 = User
+    bool isDevelopmentMode = false;  // Development mode for factory preset deletion
 };

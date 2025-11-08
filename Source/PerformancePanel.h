@@ -6,21 +6,29 @@
 class PerformancePanel : public juce::Component
 {
 public:
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     PerformancePanel(juce::AudioProcessorValueTreeState& apvts)
         : parameters(apvts)
     {
-        // 8 Performance controls with fixed, useful labels
-        setupKnob(portamentoSlider, "PORTAMENTO", portamentoLabel, "Glide time between notes");
-        setupKnob(vibratoDepthSlider, "VIBRATO DEPTH", vibratoDepthLabel, "Vibrato intensity");
-        setupKnob(vibratoRateSlider, "VIBRATO RATE", vibratoRateLabel, "Vibrato speed");
-        setupKnob(masterTuneSlider, "MASTER TUNE", masterTuneLabel, "Global pitch offset");
-        setupKnob(velocitySensSlider, "VELOCITY", velocitySensLabel, "Velocity response");
-        setupKnob(panSpreadSlider, "PAN SPREAD", panSpreadLabel, "Stereo width");
-        setupKnob(unisonVoicesSlider, "UNISON", unisonVoicesLabel, "Voice count");
-        setupKnob(unisonDetuneSlider, "DETUNE", unisonDetuneLabel, "Voice detuning");
+        // 8 Performance controls with real functionality!
+        setupPortamentoKnob();
+        setupVibratoDepthKnob();
+        setupVibratoRateKnob();
+        setupMasterTuneKnob();
+        setupVelocitySensKnob();
+        setupPanSpreadKnob();
+        setupUnisonVoicesKnob();
+        setupUnisonDetuneKnob();
 
-        // These would need to be added to the processor's APVTS
-        // For now, they'll just be visual/UI only
+        // Create parameter attachments for real functionality
+        portamentoAttachment = std::make_unique<SliderAttachment>(parameters, "portamento", portamentoSlider);
+        vibratoDepthAttachment = std::make_unique<SliderAttachment>(parameters, "vibratoDepth", vibratoDepthSlider);
+        vibratoRateAttachment = std::make_unique<SliderAttachment>(parameters, "vibratoRate", vibratoRateSlider);
+        masterTuneAttachment = std::make_unique<SliderAttachment>(parameters, "masterTune", masterTuneSlider);
+        velocitySensAttachment = std::make_unique<SliderAttachment>(parameters, "velocitySens", velocitySensSlider);
+        panSpreadAttachment = std::make_unique<SliderAttachment>(parameters, "panSpread", panSpreadSlider);
+        unisonVoicesAttachment = std::make_unique<SliderAttachment>(parameters, "unisonVoices", unisonVoicesSlider);
+        unisonDetuneAttachment = std::make_unique<SliderAttachment>(parameters, "unisonDetune", unisonDetuneSlider);
     }
 
     void paint(juce::Graphics& g) override
@@ -59,19 +67,78 @@ public:
     }
 
 private:
-    void setupKnob(juce::Slider& slider, const juce::String& labelText,
-                   juce::Label& label, const juce::String& /* tooltip */)
+    void setupPortamentoKnob()
+    {
+        setupKnobCommon(portamentoSlider, 0.0, 1.0, 0.01);
+        portamentoLabel.setText("PORTAMENTO", juce::dontSendNotification);
+        setupLabelCommon(portamentoLabel);
+    }
+
+    void setupVibratoDepthKnob()
+    {
+        setupKnobCommon(vibratoDepthSlider, 0.0, 1.0, 0.01);
+        vibratoDepthLabel.setText("VIBRATO DEPTH", juce::dontSendNotification);
+        setupLabelCommon(vibratoDepthLabel);
+    }
+
+    void setupVibratoRateKnob()
+    {
+        setupKnobCommon(vibratoRateSlider, 0.1, 10.0, 0.1);
+        vibratoRateLabel.setText("VIBRATO RATE", juce::dontSendNotification);
+        setupLabelCommon(vibratoRateLabel);
+    }
+
+    void setupMasterTuneKnob()
+    {
+        setupKnobCommon(masterTuneSlider, -100.0, 100.0, 1.0);
+        masterTuneSlider.setTextValueSuffix(" cents");
+        masterTuneLabel.setText("MASTER TUNE", juce::dontSendNotification);
+        setupLabelCommon(masterTuneLabel);
+    }
+
+    void setupVelocitySensKnob()
+    {
+        setupKnobCommon(velocitySensSlider, 0.0, 2.0, 0.01);
+        velocitySensLabel.setText("VELOCITY", juce::dontSendNotification);
+        setupLabelCommon(velocitySensLabel);
+    }
+
+    void setupPanSpreadKnob()
+    {
+        setupKnobCommon(panSpreadSlider, 0.0, 1.0, 0.01);
+        panSpreadLabel.setText("PAN SPREAD", juce::dontSendNotification);
+        setupLabelCommon(panSpreadLabel);
+    }
+
+    void setupUnisonVoicesKnob()
+    {
+        setupKnobCommon(unisonVoicesSlider, 1.0, 4.0, 1.0);
+        unisonVoicesSlider.setNumDecimalPlacesToDisplay(0); // Integer display
+        unisonVoicesLabel.setText("UNISON", juce::dontSendNotification);
+        setupLabelCommon(unisonVoicesLabel);
+    }
+
+    void setupUnisonDetuneKnob()
+    {
+        setupKnobCommon(unisonDetuneSlider, 0.0, 50.0, 1.0);
+        unisonDetuneSlider.setTextValueSuffix(" cents");
+        unisonDetuneLabel.setText("DETUNE", juce::dontSendNotification);
+        setupLabelCommon(unisonDetuneLabel);
+    }
+
+    void setupKnobCommon(juce::Slider& slider, double min, double max, double step)
     {
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setRange(0.0, 1.0, 0.01);
-        slider.setValue(0.0);
+        slider.setRange(min, max, step);
         slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
         slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff6b4f9e));
         addAndMakeVisible(slider);
+    }
 
-        label.setText(labelText, juce::dontSendNotification);
+    void setupLabelCommon(juce::Label& label)
+    {
         label.setJustificationType(juce::Justification::centred);
-        label.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold))); // Bold, compact
+        label.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
         label.setColour(juce::Label::textColourId, juce::Colour(0xff6b4f9e));
         addAndMakeVisible(label);
     }
@@ -89,4 +156,14 @@ private:
 
     juce::Label portamentoLabel, vibratoDepthLabel, vibratoRateLabel, masterTuneLabel;
     juce::Label velocitySensLabel, panSpreadLabel, unisonVoicesLabel, unisonDetuneLabel;
+
+    // Parameter attachments for real functionality
+    std::unique_ptr<SliderAttachment> portamentoAttachment;
+    std::unique_ptr<SliderAttachment> vibratoDepthAttachment;
+    std::unique_ptr<SliderAttachment> vibratoRateAttachment;
+    std::unique_ptr<SliderAttachment> masterTuneAttachment;
+    std::unique_ptr<SliderAttachment> velocitySensAttachment;
+    std::unique_ptr<SliderAttachment> panSpreadAttachment;
+    std::unique_ptr<SliderAttachment> unisonVoicesAttachment;
+    std::unique_ptr<SliderAttachment> unisonDetuneAttachment;
 };
