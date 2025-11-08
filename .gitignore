@@ -1,0 +1,37 @@
+# Build directories
+build/
+xcode-build/
+Debug/
+Release/
+
+# macOS
+.DS_Store
+*.app
+
+# JUCE/Projucer generated files
+JuceLibraryCode/
+*.user
+*.pbxuser
+*.mode*
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+nohup.out
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
